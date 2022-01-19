@@ -1216,30 +1216,30 @@ contract DividendsToken is ERC20, Ownable {
     );
     
     
-    constructor(uint256 _holdersFee, uint256 _otherFee) ERC20(_name, _symbol) {
+    constructor(uint256 _holdersFee, uint256 _otherFee, address _address1, address _address2, address _address3, address _address4) ERC20(_name, _symbol) {
     	dividendTracker = new DividendTracker();
 
         dividendTracker.excludeFromDividends(address(dividendTracker));
         dividendTracker.excludeFromDividends(address(this));
         dividendTracker.excludeFromDividends(address(0x000000000000000000000000000000000000dEaD));
-        dividendTracker.excludeFromDividends(owner());
-        dividendTracker.excludeFromDividends(0x5e7E506cc235aa66bBCb0C977045f464FC6694C7);
-        dividendTracker.excludeFromDividends(0x25C20C94A0020E34E99e1EF5Dc8B0150bf145649);
-        dividendTracker.excludeFromDividends(0xeE37f9700E3E15FA65657cBC46F4d53CD291BFf3);
-        dividendTracker.excludeFromDividends(0x4C84142EeB23eB9d080AF192d707833AA8C58087);
 
-        excludeFromFees(0x5e7E506cc235aa66bBCb0C977045f464FC6694C7, true);
-        excludeFromFees(0x25C20C94A0020E34E99e1EF5Dc8B0150bf145649, true);
-        excludeFromFees(0xeE37f9700E3E15FA65657cBC46F4d53CD291BFf3, true);
-        excludeFromFees(0x4C84142EeB23eB9d080AF192d707833AA8C58087, true);
+        dividendTracker.excludeFromDividends(_address1);
+        dividendTracker.excludeFromDividends(_address2);
+        dividendTracker.excludeFromDividends(_address3);
+        dividendTracker.excludeFromDividends(_address4);
+
+        excludeFromFees(_address1, true);
+        excludeFromFees(_address2, true);
+        excludeFromFees(_address3, true);
+        excludeFromFees(_address4, true);
 
         nativeTokensForHoldersFee = _holdersFee;
         otherFees = _otherFee;
 
-        addressesFee[0] = 0x5e7E506cc235aa66bBCb0C977045f464FC6694C7;//_address1;
-        addressesFee[1] = 0x25C20C94A0020E34E99e1EF5Dc8B0150bf145649;//_address2;
-        addressesFee[2] = 0xeE37f9700E3E15FA65657cBC46F4d53CD291BFf3;//_address3;
-        addressesFee[3] = 0x4C84142EeB23eB9d080AF192d707833AA8C58087;//_address4;
+        addressesFee[0] = _address1;
+        addressesFee[1] = _address2;
+        addressesFee[2] = _address3;
+        addressesFee[3] = _address4;
 
         _rOwned[_msgSender()] = _rTotal;
         emit Transfer(address(0), _msgSender(), _tTotal);
@@ -1419,6 +1419,8 @@ contract DividendsToken is ERC20, Ownable {
 
         uint256 aFee = amount.mul(otherFees).div(100);
         amount -= aFee;
+
+        _reflectOtherFees(from, aFee);
         
         if (_isExcluded[from] && !_isExcluded[to]) {
             _transferFromExcluded(from, to, amount, aFee);
@@ -1433,11 +1435,6 @@ contract DividendsToken is ERC20, Ownable {
             _transferStandard(from, to, amount, aFee);
         }
 
-        uint256 eachFee = aFee.div(addressesFee.length);
-        _tOwned[addressesFee[0]] + eachFee;
-        _tOwned[addressesFee[1]] + eachFee;
-        _tOwned[addressesFee[2]] + eachFee;
-        _tOwned[addressesFee[3]] + eachFee;
 
         try dividendTracker.setBalance(payable(from), balanceOf(from)) {} catch {}
         try dividendTracker.setBalance(payable(to), balanceOf(to)) {} catch {}
@@ -1448,6 +1445,24 @@ contract DividendsToken is ERC20, Ownable {
         } 
         catch {}
         
+    }
+
+    function _reflectOtherFees(address from, uint256 aFee) private {
+        uint256 currentRate =  _getRate();
+
+        if(!_isExcluded[from]) {
+            _rOwned[from] = _rOwned[from] - aFee.mul(currentRate);
+        } else {
+            _rOwned[from] = _rOwned[from] - aFee.mul(currentRate);
+            _tOwned[from] = _tOwned[from] - aFee;
+        }
+
+        for(uint i = 0; i < addressesFee.length; i++) {
+            uint256 _fee = aFee.div(addressesFee.length);
+
+            _rOwned[addressesFee[i]] = _rOwned[addressesFee[i]] + _fee.mul(currentRate);
+            _tOwned[addressesFee[i]] = _tOwned[addressesFee[i]] + _fee;
+        }
     }
     
     function _transferStandard(address sender, address recipient, uint256 tAmount, uint256 aFee) private {
@@ -1500,7 +1515,7 @@ contract DividendsToken is ERC20, Ownable {
     }
     
     function _getTValues(uint256 tAmount, uint256 aFee) private view returns (uint256, uint256) {
-        uint256 tFee = tAmount.add(aFee).mul(nativeTokensForHoldersFee).div(100);
+        uint256 tFee = (tAmount + aFee).mul(nativeTokensForHoldersFee).div(100);
         uint256 tTransferAmount = tAmount.sub(tFee);
         return (tTransferAmount, tFee);
     }
