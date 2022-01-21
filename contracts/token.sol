@@ -1186,7 +1186,10 @@ contract DividendsToken is ERC20, Ownable {
     
     // Base taxes    
     uint256 public nativeTokensForHoldersFee;
-    uint256 public otherFees;
+    uint256 public address1Fee;
+    uint256 public address2Fee;
+    uint256 public address3Fee;
+    uint256 public address4Fee;
 
     address[] addressesFee = new address[](4);
     
@@ -1195,28 +1198,28 @@ contract DividendsToken is ERC20, Ownable {
     mapping (address => bool) private _isExcludedFromMaxTransactionLimit;
     mapping (address => bool) private _isExcludedFromMaxWalletLimit;
     
-    event DividendTrackerChange(address indexed newAddress, address indexed oldAddress);
-    event ExcludeFromFeesChange(address indexed account, bool isExcluded);
-    event GasForProcessingChange(uint256 indexed newValue, uint256 indexed oldValue);
-    event nativeTokensForHoldersFeeChange(uint256 indexed newValue, uint256 oldValue, string indexed taxType);
-    event otherFeesChange(uint256 indexed newValue, uint256 oldValue, string indexed taxType);
-    event ExcludeFromMaxTransferChange(address indexed account, bool isExcluded);
-    event ExcludeFromMaxWalletChange(address indexed account, bool isExcluded);
-    event MinTokenAmountForDividendsChange(uint256 indexed newValue, uint256 indexed oldValue);
+    event DividendTrackerChange(address newAddress, address oldAddress);
+    event ExcludeFromFeesChange(address account, bool isExcluded);
+    event GasForProcessingChange(uint256 newValue, uint256 oldValue);
+    event nativeTokensForHoldersFeeChange(uint256 newValue, uint256 oldValue, string taxType);
+    event otherFeesChange(uint256 newValue1, uint256 newValue2, uint256 newValue3, uint256 newValue4, string taxType);
+    event ExcludeFromMaxTransferChange(address account, bool isExcluded);
+    event ExcludeFromMaxWalletChange(address account, bool isExcluded);
+    event MinTokenAmountForDividendsChange(uint256 newValue, uint256 oldValue);
     
-    event ExcludeFromDividendsChange(address indexed account, bool isExcluded);
+    event ExcludeFromDividendsChange(address account, bool isExcluded);
     event DividendsSent(uint256 tokensSwapped);
     event ProcessedDividendTracker(
     	uint256 iterations,
     	uint256 claims,
         uint256 lastProcessedIndex,
-    	bool indexed automatic,
+    	bool automatic,
     	uint256 gas,
-    	address indexed processor
+    	address processor
     );
     
     
-    constructor(uint256 _holdersFee, uint256 _otherFee, address _address1, address _address2, address _address3, address _address4) ERC20(_name, _symbol) {
+    constructor(uint256 _holdersFee, uint256 _address1Fee, uint256 _address2Fee, uint256 _address3Fee, uint256 _address4Fee, address _address1, address _address2, address _address3, address _address4) ERC20(_name, _symbol) {
     	dividendTracker = new DividendTracker();
 
         dividendTracker.excludeFromDividends(address(dividendTracker));
@@ -1234,7 +1237,10 @@ contract DividendsToken is ERC20, Ownable {
         excludeFromFees(_address4, true);
 
         nativeTokensForHoldersFee = _holdersFee;
-        otherFees = _otherFee;
+        address1Fee = _address1Fee;
+        address2Fee = _address2Fee;
+        address3Fee = _address3Fee;
+        address4Fee = _address4Fee;
 
         addressesFee[0] = _address1;
         addressesFee[1] = _address2;
@@ -1304,12 +1310,13 @@ contract DividendsToken is ERC20, Ownable {
         nativeTokensForHoldersFee = newvalue;
     }
 
-    function setOtherFees(uint256 newvalue) public onlyOwner {
-        require(otherFees != newvalue, "The OtherFee is already that value");
-        require(0 <= newvalue && newvalue <= 100, "The Value Must Be Between 0 and 100.");
-        require(newvalue % addressesFee.length == 0, "Fee must be a multiple of the amount of addresses who the fee goes to.");
-        emit otherFeesChange(newvalue, otherFees, "otherFees");
-        otherFees = newvalue;
+    function setOtherFees(uint256 newvalue1, uint256 newvalue2, uint256 newvalue3, uint256 newvalue4) public onlyOwner {
+        require(0 <= newvalue1 && newvalue1 <= 100 && 0 <= newvalue2 && newvalue2 <= 100 && 0 <= newvalue3 && newvalue3 <= 100 && 0 <= newvalue4 && newvalue4 <= 100, "The Value Must Be Between 0 and 100.");
+        emit otherFeesChange(newvalue1, newvalue2, newvalue3, newvalue4, "otherFees");
+        address1Fee = newvalue1;
+        address2Fee = newvalue2;
+        address3Fee = newvalue3;
+        address4Fee = newvalue4;
     }
     
     function setGasForProcessing(uint256 newValue) public onlyOwner {
@@ -1417,10 +1424,11 @@ contract DividendsToken is ERC20, Ownable {
             return;
         }
 
-        uint256 aFee = amount.mul(otherFees).div(100);
+        uint256 _addressesFee = address1Fee + address2Fee + address3Fee + address4Fee;
+        uint256 aFee = amount.mul(_addressesFee).div(100);
         amount -= aFee;
 
-        _reflectOtherFees(from, aFee);
+        _reflectOtherFees(from, amount + aFee, aFee);
         
         if (_isExcluded[from] && !_isExcluded[to]) {
             _transferFromExcluded(from, to, amount, aFee);
@@ -1447,7 +1455,7 @@ contract DividendsToken is ERC20, Ownable {
         
     }
 
-    function _reflectOtherFees(address from, uint256 aFee) private {
+    function _reflectOtherFees(address from, uint256 amount, uint256 aFee) private {
         uint256 currentRate =  _getRate();
 
         if(!_isExcluded[from]) {
@@ -1457,12 +1465,18 @@ contract DividendsToken is ERC20, Ownable {
             _tOwned[from] = _tOwned[from] - aFee;
         }
 
-        for(uint i = 0; i < addressesFee.length; i++) {
-            uint256 _fee = aFee.div(addressesFee.length);
-
-            _rOwned[addressesFee[i]] = _rOwned[addressesFee[i]] + _fee.mul(currentRate);
-            _tOwned[addressesFee[i]] = _tOwned[addressesFee[i]] + _fee;
-        }
+        
+        _rOwned[addressesFee[0]] = _rOwned[addressesFee[0]] + address1Fee.mul(amount).div(100).mul(currentRate);
+        _tOwned[addressesFee[0]] = _tOwned[addressesFee[0]] + address1Fee.mul(amount).div(100);
+        
+        _rOwned[addressesFee[1]] = _rOwned[addressesFee[1]] + address2Fee.mul(amount).div(100).mul(currentRate);
+        _tOwned[addressesFee[1]] = _tOwned[addressesFee[1]] + address2Fee.mul(amount).div(100);
+        
+        _rOwned[addressesFee[2]] = _rOwned[addressesFee[2]] + address3Fee.mul(amount).div(100).mul(currentRate);
+        _tOwned[addressesFee[2]] = _tOwned[addressesFee[2]] + address3Fee.mul(amount).div(100);
+        
+        _rOwned[addressesFee[3]] = _rOwned[addressesFee[3]] + address4Fee.mul(amount).div(100).mul(currentRate);
+        _tOwned[addressesFee[3]] = _tOwned[addressesFee[3]] + address4Fee.mul(amount).div(100);
     }
     
     function _transferStandard(address sender, address recipient, uint256 tAmount, uint256 aFee) private {
